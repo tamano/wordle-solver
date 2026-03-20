@@ -165,6 +165,21 @@ fn suggest_next(candidates: &[String], all_words: &[String]) -> Option<String> {
         .cloned()
 }
 
+fn is_list_command(input: &str) -> bool {
+    input.eq_ignore_ascii_case("list") || input == "?"
+}
+
+fn format_candidates(candidates: &[String]) -> String {
+    let mut output = format!("Remaining candidates ({}):", candidates.len());
+    for (i, word) in candidates.iter().enumerate() {
+        if i > 0 && i % 10 == 0 {
+            output.push('\n');
+        }
+        output.push_str(&format!("  {}", word.to_uppercase()));
+    }
+    output
+}
+
 fn print_banner() {
     println!("╔══════════════════════════════════╗");
     println!("║        Wordle Solver CLI         ║");
@@ -174,6 +189,9 @@ fn print_banner() {
     println!("  G = Green  (correct letter, correct position)");
     println!("  Y = Yellow (correct letter, wrong position)");
     println!("  _ = Gray   (letter not in word)");
+    println!();
+    println!("Commands:");
+    println!("  list  - Show all remaining candidates");
     println!();
     println!("Example: guess 'crane', feedback 'G_Y__'");
     println!("         means C=green, R=gray, A=yellow, N=gray, E=gray");
@@ -214,7 +232,13 @@ fn main() {
 
         // Get guess
         let guess = loop {
-            let input = read_line("Enter your guess (5 letters): ");
+            let input = read_line("Enter your guess (5 letters, or 'list'): ");
+            if is_list_command(&input) {
+                println!();
+                println!("{}", format_candidates(&candidates));
+                println!();
+                continue;
+            }
             if input.len() == 5 && input.chars().all(|c| c.is_ascii_alphabetic()) {
                 break input.to_lowercase();
             }
@@ -499,5 +523,45 @@ mod tests {
     fn test_clue_parse_invalid_feedback_char() {
         assert!(Clue::parse("crane", "G_X__").is_err());
         assert!(Clue::parse("crane", "G_1__").is_err());
+    }
+
+    #[test]
+    fn test_is_list_command() {
+        assert!(is_list_command("list"));
+        assert!(is_list_command("LIST"));
+        assert!(is_list_command("List"));
+        assert!(is_list_command("?"));
+        assert!(!is_list_command("crane"));
+        assert!(!is_list_command(""));
+        assert!(!is_list_command("lists"));
+        assert!(!is_list_command("lis"));
+    }
+
+    #[test]
+    fn test_format_candidates_empty() {
+        let candidates: Vec<String> = vec![];
+        let output = format_candidates(&candidates);
+        assert_eq!(output, "Remaining candidates (0):");
+    }
+
+    #[test]
+    fn test_format_candidates_few() {
+        let candidates = vec!["stone".to_string(), "stove".to_string(), "stoke".to_string()];
+        let output = format_candidates(&candidates);
+        assert!(output.starts_with("Remaining candidates (3):"));
+        assert!(output.contains("STONE"));
+        assert!(output.contains("STOVE"));
+        assert!(output.contains("STOKE"));
+    }
+
+    #[test]
+    fn test_format_candidates_wraps_at_10() {
+        let candidates: Vec<String> = (0..12)
+            .map(|i| format!("word{}", (b'a' + i as u8) as char))
+            .collect();
+        let output = format_candidates(&candidates);
+        let lines: Vec<&str> = output.lines().collect();
+        // First line has header + 10 words, second line has remaining 2
+        assert_eq!(lines.len(), 2);
     }
 }

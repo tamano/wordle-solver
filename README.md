@@ -34,6 +34,8 @@ cargo test
 | 推測した単語 | 5文字の英字 | `crane` |
 | Wordleのフィードバック | 5文字 (G / Y / \_) | `G_Y__` |
 
+推測の入力時に `list` または `?` と入力すると、現在残っている候補単語を一覧表示できます。
+
 ### フィードバック文字
 
 | 文字 | Wordleの色 | 意味 |
@@ -56,7 +58,7 @@ Suggested first guess: "AROSE"
 --- Round 1 ---
 Candidates remaining: 8636
 
-Enter your guess (5 letters): crane
+Enter your guess (5 letters, or 'list'): crane
 Enter feedback (G/Y/_ for each letter): ____G
 
 Suggested next guess: "STOMP"
@@ -64,7 +66,7 @@ Suggested next guess: "STOMP"
 --- Round 2 ---
 Candidates remaining: 156
 
-Enter your guess (5 letters): stomp
+Enter your guess (5 letters, or 'list'): stomp
 Enter feedback (G/Y/_ for each letter): GGG__
 
 Suggested next guess: "STOVE"
@@ -73,7 +75,7 @@ Suggested next guess: "STOVE"
 Candidates remaining: 4
 Candidates: STONE, STOVE, STOKE, STOLE
 
-Enter your guess (5 letters): stove
+Enter your guess (5 letters, or 'list'): stove
 Enter feedback (G/Y/_ for each letter): GGGGG
 
 Congratulations! Solved in 3 guesses!
