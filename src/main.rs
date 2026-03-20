@@ -394,26 +394,110 @@ mod tests {
     }
 
     #[test]
-    fn test_duplicate_letter_one_green_one_gray() {
-        // guess "speed": s=gray, p=gray, e=green(pos2), e=gray, d=gray
-        // => answer has exactly 1 'e', at position 2
+    fn test_duplicate_letter_green_and_gray_exact_count() {
+        // Guess "erase" GG___: e=green(pos0), r=green(pos1), a=gray, s=gray, e=gray
+        // => e at pos0, r at pos1, a/s absent, exactly 1 'e' (1 green + 1 gray)
         let words = vec![
-            "stele".to_string(), // e at pos 2 and 4 => 2 e's, fail
-            "axels".to_string(), // e at pos 2 => 1 e, pass (no other constraints violated)
-            "steel".to_string(), // e at pos 2 and 3 => 2 e's, fail
+            "erode".to_string(), // e@0✓ r@1✓ but 2 'e's -> FAIL
+            "error".to_string(), // e@0✓ r@1✓ no a/s✓ exactly 1 'e'✓ -> PASS
+            "groan".to_string(), // 'e' not at pos 0 -> FAIL
         ];
-        let clue = Clue::parse("speed", "_GY__").unwrap();
-        // p=gray, e=green(pos1 of word 'speed'), but let's keep it simple:
-        // Use "?e???" pattern: pos1 green, exactly 1 'e'
-        // Actually parse "speed" with "_G___": s=gray, p=green, e=gray, e=gray, d=gray
-        // => p at pos1, no e in answer
-        let clue2 = Clue::parse("lleel", "__GY_").unwrap();
-        // pos2=green(e), pos3=yellow(e) but pos3 must not be 'e' and word has >=2 e's...
-        // Let's test a simpler exact-count case:
-        let clue3 = Clue::parse("eexxx", "G____ ").ok();
-        // Just verify the basic duplicate scenario compiles and runs
-        let _ = filter_candidates(&words, &[clue]);
-        let _ = filter_candidates(&words, &[clue2]);
-        drop(clue3);
+        let clue = Clue::parse("erase", "GG___").unwrap();
+        let result = filter_candidates(&words, &[clue]);
+        assert!(!result.contains(&"erode".to_string())); // 2 'e's
+        assert!(result.contains(&"error".to_string()));
+        assert!(!result.contains(&"groan".to_string())); // wrong pos
+    }
+
+    #[test]
+    fn test_filter_yellow_letter_must_be_present() {
+        // 't' yellow at pos 0 => word contains 't' but NOT at pos 0
+        let words = vec![
+            "stone".to_string(), // 't' at pos 1 -> PASS
+            "built".to_string(), // 't' at pos 4 -> PASS
+            "crane".to_string(), // no 't' -> FAIL
+            "towel".to_string(), // 't' at pos 0 -> FAIL (yellow: must not be at same pos)
+        ];
+        let clue = Clue::parse("txxxx", "Y____").unwrap();
+        let result = filter_candidates(&words, &[clue]);
+        assert!(result.contains(&"stone".to_string()));
+        assert!(result.contains(&"built".to_string()));
+        assert!(!result.contains(&"crane".to_string())); // no 't'
+        assert!(!result.contains(&"towel".to_string())); // 't' at pos 0
+    }
+
+    #[test]
+    fn test_multiple_clues_accumulated() {
+        let all_words = load_words();
+        // Clue 1: "raise" _____ => r,a,i,s,e all absent
+        // Clue 2: "clout" G____ => c at pos 0, l,o,u,t absent
+        let clue1 = Clue::parse("raise", "_____").unwrap();
+        let clue2 = Clue::parse("clout", "G____").unwrap();
+        let candidates = filter_candidates(&all_words, &[clue1, clue2]);
+
+        for word in &candidates {
+            let chars: Vec<char> = word.chars().collect();
+            assert_eq!(chars[0], 'c', "word '{word}' doesn't start with 'c'");
+            for banned in ['r', 'a', 'i', 's', 'e', 'l', 'o', 'u', 't'] {
+                assert!(!word.contains(banned), "word '{word}' contains banned letter '{banned}'");
+            }
+        }
+        // Sanity: should have narrowed down meaningfully
+        assert!(candidates.len() < all_words.len());
+    }
+
+    #[test]
+    fn test_solve_converges() {
+        // Simulate a 3-step solve for "stove":
+        // Round 1: "crane" -> c=gray, r=gray, a=gray, n=gray, e=gray (none in "stove"... wait 'e' is)
+        // "stove" has s,t,o,v,e
+        // "crane" vs "stove": c∉stove->gray, r∉stove->gray, a∉stove->gray, n∉stove->gray, e∈stove@pos4=same pos->green
+        // Round 1: "crane" "____G"
+        // Round 2: "stomp" vs "stove": s=green, t=green, o=green, m∉stove->gray, p∉stove->gray
+        // Round 2: "stomp" "GGG__"
+        let all_words = load_words();
+        let mut candidates = all_words.clone();
+
+        let c1 = Clue::parse("crane", "____G").unwrap();
+        candidates = filter_candidates(&candidates, &[c1]);
+        assert!(candidates.contains(&"stove".to_string()), "stove should survive round 1");
+        let count1 = candidates.len();
+
+        let c2 = Clue::parse("stomp", "GGG__").unwrap();
+        candidates = filter_candidates(&candidates, &[c2]);
+        assert!(candidates.contains(&"stove".to_string()), "stove should survive round 2");
+        assert!(candidates.len() < count1, "candidates should decrease");
+    }
+
+    #[test]
+    fn test_suggest_next_returns_candidate() {
+        let all_words = load_words();
+        // With many candidates, suggestion should come from all_words
+        let suggestion = suggest_next(&all_words, &all_words);
+        assert!(suggestion.is_some());
+        let s = suggestion.unwrap();
+        assert_eq!(s.len(), 5);
+        assert!(all_words.contains(&s));
+    }
+
+    #[test]
+    fn test_clue_parse_case_insensitive() {
+        // Both word and feedback should be accepted in any case
+        let clue = Clue::parse("CRANE", "g_y__").unwrap();
+        assert_eq!(clue.word, ['c', 'r', 'a', 'n', 'e']);
+        assert_eq!(clue.hints[0], Hint::Green);
+        assert_eq!(clue.hints[2], Hint::Yellow);
+    }
+
+    #[test]
+    fn test_clue_parse_invalid_char_in_word() {
+        assert!(Clue::parse("cr4ne", "G____").is_err());
+        assert!(Clue::parse("cr ne", "G____").is_err());
+    }
+
+    #[test]
+    fn test_clue_parse_invalid_feedback_char() {
+        assert!(Clue::parse("crane", "G_X__").is_err());
+        assert!(Clue::parse("crane", "G_1__").is_err());
     }
 }
