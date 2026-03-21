@@ -69,28 +69,28 @@ fn matches_all_clues(word: &str, clues: &[Clue]) -> bool {
     true
 }
 
-fn matches_clue(word: &[char], clue: &Clue) -> bool {
-    // Build letter count map for the candidate word
-    let mut letter_counts: HashMap<char, usize> = HashMap::new();
-    for &c in word {
-        *letter_counts.entry(c).or_insert(0) += 1;
-    }
+/// Per-letter constraint derived from a clue: (min_count, has_gray).
+type LetterConstraints = HashMap<char, (usize, bool)>;
 
-    // Compute per-letter constraints from the clue:
-    // - green/yellow => letter appears at least N times
-    // - gray mixed with green/yellow => letter appears exactly N times
-    // - all gray => letter does not appear
-    let mut clue_letter_info: HashMap<char, (usize, bool)> = HashMap::new(); // (min_count, has_gray)
+/// Build per-letter constraints from a clue.
+/// - green/yellow => letter appears at least N times
+/// - gray mixed with green/yellow => letter appears exactly N times
+/// - all gray => letter does not appear
+fn build_letter_constraints(clue: &Clue) -> LetterConstraints {
+    let mut info: LetterConstraints = HashMap::new();
     for i in 0..5 {
         let c = clue.word[i];
-        let entry = clue_letter_info.entry(c).or_insert((0, false));
+        let entry = info.entry(c).or_insert((0, false));
         match clue.hints[i] {
             Hint::Green | Hint::Yellow => entry.0 += 1,
             Hint::Gray => entry.1 = true,
         }
     }
+    info
+}
 
-    // Check exact position constraints
+/// Check that each letter is (or is not) at the exact position the clue requires.
+fn matches_positions(word: &[char], clue: &Clue) -> bool {
     for i in 0..5 {
         let c = clue.word[i];
         match clue.hints[i] {
@@ -107,9 +107,12 @@ fn matches_clue(word: &[char], clue: &Clue) -> bool {
             Hint::Gray => {}
         }
     }
+    true
+}
 
-    // Check count constraints
-    for (c, (min, has_gray)) in &clue_letter_info {
+/// Check that letter counts in the word satisfy the constraints.
+fn matches_counts(letter_counts: &HashMap<char, usize>, constraints: &LetterConstraints) -> bool {
+    for (c, (min, has_gray)) in constraints {
         let actual = *letter_counts.get(c).unwrap_or(&0);
         if *has_gray && *min == 0 {
             // Letter must not appear at all
@@ -128,8 +131,17 @@ fn matches_clue(word: &[char], clue: &Clue) -> bool {
             }
         }
     }
-
     true
+}
+
+fn matches_clue(word: &[char], clue: &Clue) -> bool {
+    let mut letter_counts: HashMap<char, usize> = HashMap::new();
+    for &c in word {
+        *letter_counts.entry(c).or_insert(0) += 1;
+    }
+
+    let constraints = build_letter_constraints(clue);
+    matches_positions(word, clue) && matches_counts(&letter_counts, &constraints)
 }
 
 /// Score a word by summing per-position letter frequencies in the candidate pool.
