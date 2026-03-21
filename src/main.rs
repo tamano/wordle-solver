@@ -243,4 +243,145 @@ mod tests {
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines.len(), 2);
     }
+
+    #[test]
+    fn test_suggest_next_empty_candidates() {
+        let all_words = load_words();
+        let candidates: Vec<String> = vec![];
+        assert_eq!(suggest_next(&candidates, &all_words), None);
+    }
+}
+
+#[cfg(test)]
+mod game_tests {
+    use std::io::Cursor;
+    use crate::game::{run_game, GameResult};
+
+    fn words() -> Vec<String> {
+        vec![
+            "apple".to_string(),
+            "grape".to_string(),
+            "crane".to_string(),
+            "stone".to_string(),
+            "stove".to_string(),
+        ]
+    }
+
+    fn run(words: &[String], input: &str) -> (GameResult, String) {
+        let mut cursor = Cursor::new(input.as_bytes().to_vec());
+        let mut out = Vec::new();
+        let result = run_game(words, &mut cursor, &mut out);
+        (result, String::from_utf8(out).unwrap())
+    }
+
+    #[test]
+    fn test_game_solved_round_1() {
+        // Guess correctly on round 1
+        let words = words();
+        let input = "crane\nGGGGG\n";
+        let (result, output) = run(&words, input);
+        assert_eq!(result, GameResult::Solved { round: 1 });
+        assert!(output.contains("Solved in 1 guess!"));
+    }
+
+    #[test]
+    fn test_game_solved_round_2() {
+        let words = vec!["abcde".to_string(), "fghij".to_string()];
+        // Round 1: guess "abcde" feedback "_____" → eliminates "abcde", keeps "fghij"
+        // Round 2: guess "fghij" feedback "GGGGG"
+        let input = "abcde\n_____\nfghij\nGGGGG\n";
+        let (result, output) = run(&words, input);
+        assert_eq!(result, GameResult::Solved { round: 2 });
+        assert!(output.contains("Solved in 2 guesses!"));
+    }
+
+    #[test]
+    fn test_game_no_candidates() {
+        // Contradictory feedback eliminates all candidates
+        let words = vec!["apple".to_string()];
+        let input = "apple\n_____\n";
+        let (result, output) = run(&words, input);
+        assert_eq!(result, GameResult::NoCandidates);
+        assert!(output.contains("No candidates remaining"));
+    }
+
+    #[test]
+    fn test_game_input_closed_at_guess() {
+        let words = words();
+        let input = "";  // EOF immediately
+        let (result, _) = run(&words, input);
+        assert_eq!(result, GameResult::InputClosed);
+    }
+
+    #[test]
+    fn test_game_input_closed_at_feedback() {
+        let words = words();
+        let input = "crane\n";  // EOF after guess, before feedback
+        let (result, _) = run(&words, input);
+        assert_eq!(result, GameResult::InputClosed);
+    }
+
+    #[test]
+    fn test_game_invalid_guess_retry() {
+        let words = words();
+        // "hi" is too short, "123456" is wrong, then valid guess + win
+        let input = "hi\n12345\ncrane\nGGGGG\n";
+        let (result, output) = run(&words, input);
+        assert_eq!(result, GameResult::Solved { round: 1 });
+        assert!(output.contains("Please enter exactly 5 alphabetic letters"));
+    }
+
+    #[test]
+    fn test_game_invalid_feedback_retry() {
+        let words = words();
+        // Valid guess, bad feedback "XXXXX", then correct feedback
+        let input = "crane\nXXXXX\nGGGGG\n";
+        let (result, output) = run(&words, input);
+        assert_eq!(result, GameResult::Solved { round: 1 });
+        assert!(output.contains("Please enter exactly 5 chars using G, Y, or _"));
+    }
+
+    #[test]
+    fn test_game_list_command() {
+        let words = words();
+        let input = "list\ncrane\nGGGGG\n";
+        let (result, output) = run(&words, input);
+        assert_eq!(result, GameResult::Solved { round: 1 });
+        assert!(output.contains("Remaining candidates (5):"));
+    }
+
+    #[test]
+    fn test_game_banner_and_suggestion() {
+        let words = words();
+        let input = "crane\nGGGGG\n";
+        let (_, output) = run(&words, input);
+        assert!(output.contains("Wordle Solver CLI"));
+        assert!(output.contains("Dictionary loaded: 5 five-letter words"));
+        assert!(output.contains("Suggested first guess:"));
+    }
+
+    #[test]
+    fn test_game_over_after_6_rounds() {
+        let words = vec!["abcdf".to_string(), "abcdg".to_string()];
+        let mut input = String::new();
+        // guess "abcdx" with "GGGG_": pos0-3 correct, pos4 gray. Both words survive.
+        for _ in 0..6 {
+            input.push_str("abcdx\nGGGG_\n");
+        }
+
+        let (result, output) = run(&words, &input);
+        assert!(matches!(result, GameResult::GameOver { .. }));
+        assert!(output.contains("Reached 6 guesses. Game over."));
+    }
+
+    #[test]
+    fn test_game_shows_candidates_when_few() {
+        // With <= 10 candidates, they should be listed
+        let words = vec!["crane".to_string(), "stone".to_string()];
+        let input = "crane\nGGGGG\n";
+        let (_, output) = run(&words, input);
+        assert!(output.contains("Candidates:"));
+        assert!(output.contains("CRANE"));
+        assert!(output.contains("STONE"));
+    }
 }
