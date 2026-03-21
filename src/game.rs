@@ -56,6 +56,39 @@ pub enum GameResult {
     InputClosed,
 }
 
+/// Prompt for a valid 5-letter guess, handling list commands. Returns None on EOF.
+fn read_guess(
+    candidates: &[String],
+    input: &mut dyn BufRead,
+    out: &mut dyn Write,
+) -> Option<String> {
+    loop {
+        let line = read_line("Enter your guess (5 letters, or 'list'): ", input, out)?;
+        if is_list_command(&line) {
+            writeln!(out).unwrap();
+            writeln!(out, "{}", format_candidates(candidates)).unwrap();
+            writeln!(out).unwrap();
+            continue;
+        }
+        if line.len() == 5 && line.chars().all(|c| c.is_ascii_alphabetic()) {
+            return Some(line.to_lowercase());
+        }
+        writeln!(out, "  Please enter exactly 5 alphabetic letters.").unwrap();
+    }
+}
+
+/// Prompt for valid feedback (5 chars of G/Y/_). Returns None on EOF.
+fn read_feedback(input: &mut dyn BufRead, out: &mut dyn Write) -> Option<String> {
+    loop {
+        let line = read_line("Enter feedback (G/Y/_ for each letter): ", input, out)?;
+        let upper = line.to_uppercase();
+        if upper.len() == 5 && upper.chars().all(|c| matches!(c, 'G' | 'Y' | '_')) {
+            return Some(upper);
+        }
+        writeln!(out, "  Please enter exactly 5 chars using G, Y, or _.").unwrap();
+    }
+}
+
 pub fn run_game(
     all_words: &[String],
     input: &mut dyn BufRead,
@@ -83,42 +116,16 @@ pub fn run_game(
         }
         writeln!(out).unwrap();
 
-        // Get guess
-        let guess = loop {
-            let line = match read_line("Enter your guess (5 letters, or 'list'): ", input, out) {
-                Some(s) => s,
-                None => return GameResult::InputClosed,
-            };
-            if is_list_command(&line) {
-                writeln!(out).unwrap();
-                writeln!(out, "{}", format_candidates(&candidates)).unwrap();
-                writeln!(out).unwrap();
-                continue;
-            }
-            if line.len() == 5 && line.chars().all(|c| c.is_ascii_alphabetic()) {
-                break line.to_lowercase();
-            }
-            writeln!(out, "  Please enter exactly 5 alphabetic letters.").unwrap();
+        let guess = match read_guess(&candidates, input, out) {
+            Some(g) => g,
+            None => return GameResult::InputClosed,
         };
 
-        // Get feedback
-        let feedback = loop {
-            let line = match read_line("Enter feedback (G/Y/_ for each letter): ", input, out) {
-                Some(s) => s,
-                None => return GameResult::InputClosed,
-            };
-            let upper = line.to_uppercase();
-            if upper.len() == 5
-                && upper
-                    .chars()
-                    .all(|c| matches!(c, 'G' | 'Y' | '_'))
-            {
-                break upper;
-            }
-            writeln!(out, "  Please enter exactly 5 chars using G, Y, or _.").unwrap();
+        let feedback = match read_feedback(input, out) {
+            Some(f) => f,
+            None => return GameResult::InputClosed,
         };
 
-        // Win check
         if feedback == "GGGGG" {
             writeln!(out).unwrap();
             writeln!(
