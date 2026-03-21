@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
 
 const WORDS: &str = include_str!("data/words.txt");
 
@@ -180,75 +180,96 @@ fn format_candidates(candidates: &[String]) -> String {
     output
 }
 
-fn print_banner() {
-    println!("╔══════════════════════════════════╗");
-    println!("║        Wordle Solver CLI         ║");
-    println!("╚══════════════════════════════════╝");
-    println!();
-    println!("Feedback format: 5 chars, one per letter");
-    println!("  G = Green  (correct letter, correct position)");
-    println!("  Y = Yellow (correct letter, wrong position)");
-    println!("  _ = Gray   (letter not in word)");
-    println!();
-    println!("Commands:");
-    println!("  list  - Show all remaining candidates");
-    println!();
-    println!("Example: guess 'crane', feedback 'G_Y__'");
-    println!("         means C=green, R=gray, A=yellow, N=gray, E=gray");
-    println!();
+fn print_banner(out: &mut dyn Write) {
+    writeln!(out, "╔══════════════════════════════════╗").unwrap();
+    writeln!(out, "║        Wordle Solver CLI         ║").unwrap();
+    writeln!(out, "╚══════════════════════════════════╝").unwrap();
+    writeln!(out).unwrap();
+    writeln!(out, "Feedback format: 5 chars, one per letter").unwrap();
+    writeln!(out, "  G = Green  (correct letter, correct position)").unwrap();
+    writeln!(out, "  Y = Yellow (correct letter, wrong position)").unwrap();
+    writeln!(out, "  _ = Gray   (letter not in word)").unwrap();
+    writeln!(out).unwrap();
+    writeln!(out, "Commands:").unwrap();
+    writeln!(out, "  list  - Show all remaining candidates").unwrap();
+    writeln!(out).unwrap();
+    writeln!(out, "Example: guess 'crane', feedback 'G_Y__'").unwrap();
+    writeln!(out, "         means C=green, R=gray, A=yellow, N=gray, E=gray").unwrap();
+    writeln!(out).unwrap();
 }
 
-fn read_line(prompt: &str) -> String {
-    print!("{}", prompt);
-    io::stdout().flush().unwrap();
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    input.trim().to_string()
-}
-
-fn main() {
-    let all_words = load_words();
-    let mut candidates = all_words.clone();
-
-    print_banner();
-    println!("Dictionary loaded: {} five-letter words", all_words.len());
-    println!();
-
-    if let Some(suggestion) = suggest_next(&candidates, &all_words) {
-        println!("Suggested first guess: \"{}\"", suggestion.to_uppercase());
+fn read_line(prompt: &str, input: &mut dyn BufRead, out: &mut dyn Write) -> Option<String> {
+    write!(out, "{}", prompt).unwrap();
+    out.flush().unwrap();
+    let mut buf = String::new();
+    match input.read_line(&mut buf) {
+        Ok(0) => None,
+        Ok(_) => Some(buf.trim().to_string()),
+        Err(_) => None,
     }
-    println!();
+}
+
+/// Game result returned by run_game.
+#[derive(Debug, PartialEq)]
+enum GameResult {
+    Solved { round: usize },
+    NoCandidates,
+    GameOver { remaining: Vec<String> },
+    InputClosed,
+}
+
+fn run_game(
+    all_words: &[String],
+    input: &mut dyn BufRead,
+    out: &mut dyn Write,
+) -> GameResult {
+    let mut candidates = all_words.to_vec();
+
+    print_banner(out);
+    writeln!(out, "Dictionary loaded: {} five-letter words", all_words.len()).unwrap();
+    writeln!(out).unwrap();
+
+    if let Some(suggestion) = suggest_next(&candidates, all_words) {
+        writeln!(out, "Suggested first guess: \"{}\"", suggestion.to_uppercase()).unwrap();
+    }
+    writeln!(out).unwrap();
 
     let mut round = 1;
     loop {
-        println!("--- Round {} ---", round);
-        println!("Candidates remaining: {}", candidates.len());
+        writeln!(out, "--- Round {} ---", round).unwrap();
+        writeln!(out, "Candidates remaining: {}", candidates.len()).unwrap();
 
         if candidates.len() <= 10 {
             let words: Vec<String> = candidates.iter().map(|w| w.to_uppercase()).collect();
-            println!("Candidates: {}", words.join(", "));
+            writeln!(out, "Candidates: {}", words.join(", ")).unwrap();
         }
-        println!();
+        writeln!(out).unwrap();
 
         // Get guess
         let guess = loop {
-            let input = read_line("Enter your guess (5 letters, or 'list'): ");
-            if is_list_command(&input) {
-                println!();
-                println!("{}", format_candidates(&candidates));
-                println!();
+            let line = match read_line("Enter your guess (5 letters, or 'list'): ", input, out) {
+                Some(s) => s,
+                None => return GameResult::InputClosed,
+            };
+            if is_list_command(&line) {
+                writeln!(out).unwrap();
+                writeln!(out, "{}", format_candidates(&candidates)).unwrap();
+                writeln!(out).unwrap();
                 continue;
             }
-            if input.len() == 5 && input.chars().all(|c| c.is_ascii_alphabetic()) {
-                break input.to_lowercase();
+            if line.len() == 5 && line.chars().all(|c| c.is_ascii_alphabetic()) {
+                break line.to_lowercase();
             }
-            println!("  Please enter exactly 5 alphabetic letters.");
+            writeln!(out, "  Please enter exactly 5 alphabetic letters.").unwrap();
         };
 
         // Get feedback
         let feedback = loop {
-            let input = read_line("Enter feedback (G/Y/_ for each letter): ");
-            let upper = input.to_uppercase();
+            let line = match read_line("Enter feedback (G/Y/_ for each letter): ", input, out) {
+                Some(s) => s,
+                None => return GameResult::InputClosed,
+            };
+            let upper = line.to_uppercase();
             if upper.len() == 5
                 && upper
                     .chars()
@@ -256,18 +277,19 @@ fn main() {
             {
                 break upper;
             }
-            println!("  Please enter exactly 5 chars using G, Y, or _.");
+            writeln!(out, "  Please enter exactly 5 chars using G, Y, or _.").unwrap();
         };
 
         // Win check
         if feedback == "GGGGG" {
-            println!();
-            println!(
+            writeln!(out).unwrap();
+            writeln!(
+                out,
                 "Congratulations! Solved in {} guess{}!",
                 round,
                 if round == 1 { "" } else { "es" }
-            );
-            break;
+            ).unwrap();
+            return GameResult::Solved { round };
         }
 
         match Clue::parse(&guess, &feedback) {
@@ -275,36 +297,44 @@ fn main() {
                 candidates = filter_candidates(&candidates, &[clue]);
             }
             Err(e) => {
-                println!("Error: {}", e);
+                writeln!(out, "Error: {}", e).unwrap();
                 continue;
             }
         }
 
-        println!();
+        writeln!(out).unwrap();
 
         if candidates.is_empty() {
-            println!("No candidates remaining.");
-            println!("Please check that your guess and feedback are correct.");
-            break;
+            writeln!(out, "No candidates remaining.").unwrap();
+            writeln!(out, "Please check that your guess and feedback are correct.").unwrap();
+            return GameResult::NoCandidates;
         }
 
-        if let Some(suggestion) = suggest_next(&candidates, &all_words) {
-            println!("Suggested next guess: \"{}\"", suggestion.to_uppercase());
+        if let Some(suggestion) = suggest_next(&candidates, all_words) {
+            writeln!(out, "Suggested next guess: \"{}\"", suggestion.to_uppercase()).unwrap();
         }
-        println!();
+        writeln!(out).unwrap();
 
         round += 1;
 
         if round > 6 {
-            println!("Reached 6 guesses. Game over.");
-            if !candidates.is_empty() {
-                let words: Vec<String> =
-                    candidates.iter().take(5).map(|w| w.to_uppercase()).collect();
-                println!("Remaining candidates: {}", words.join(", "));
+            writeln!(out, "Reached 6 guesses. Game over.").unwrap();
+            let remaining: Vec<String> = candidates.iter().take(5).cloned().collect();
+            if !remaining.is_empty() {
+                let words: Vec<String> = remaining.iter().map(|w| w.to_uppercase()).collect();
+                writeln!(out, "Remaining candidates: {}", words.join(", ")).unwrap();
             }
-            break;
+            return GameResult::GameOver { remaining };
         }
     }
+}
+
+fn main() {
+    let all_words = load_words();
+    let stdin = io::stdin();
+    let mut input = stdin.lock();
+    let mut out = io::stdout();
+    run_game(&all_words, &mut input, &mut out);
 }
 
 #[cfg(test)]
