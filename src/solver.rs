@@ -60,21 +60,6 @@ pub fn suggest_next(candidates: &[String], all_words: &[String]) -> Option<Strin
         .cloned()
 }
 
-pub fn is_list_command(input: &str) -> bool {
-    input.eq_ignore_ascii_case("list") || input == "?"
-}
-
-pub fn format_candidates(candidates: &[String]) -> String {
-    let mut output = format!("Remaining candidates ({}):", candidates.len());
-    for (i, word) in candidates.iter().enumerate() {
-        if i > 0 && i % 10 == 0 {
-            output.push('\n');
-        }
-        output.push_str(&format!("  {}", word.to_uppercase()));
-    }
-    output
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,42 +224,4 @@ mod tests {
         assert_eq!(suggest_next(&candidates, &all_words), None);
     }
 
-    #[test]
-    fn test_is_list_command() {
-        assert!(is_list_command("list"));
-        assert!(is_list_command("LIST"));
-        assert!(is_list_command("List"));
-        assert!(is_list_command("?"));
-        assert!(!is_list_command("crane"));
-        assert!(!is_list_command(""));
-        assert!(!is_list_command("lists"));
-        assert!(!is_list_command("lis"));
-    }
-
-    #[test]
-    fn test_format_candidates_empty() {
-        let candidates: Vec<String> = vec![];
-        let output = format_candidates(&candidates);
-        assert_eq!(output, "Remaining candidates (0):");
-    }
-
-    #[test]
-    fn test_format_candidates_few() {
-        let candidates = vec!["stone".to_string(), "stove".to_string(), "stoke".to_string()];
-        let output = format_candidates(&candidates);
-        assert!(output.starts_with("Remaining candidates (3):"));
-        assert!(output.contains("STONE"));
-        assert!(output.contains("STOVE"));
-        assert!(output.contains("STOKE"));
-    }
-
-    #[test]
-    fn test_format_candidates_wraps_at_10() {
-        let candidates: Vec<String> = (0..12)
-            .map(|i| format!("word{}", (b'a' + i as u8) as char))
-            .collect();
-        let output = format_candidates(&candidates);
-        let lines: Vec<&str> = output.lines().collect();
-        assert_eq!(lines.len(), 2);
-    }
 }
