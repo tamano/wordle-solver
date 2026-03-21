@@ -114,3 +114,44 @@ pub fn matches_clue(word: &[char], clue: &Clue) -> bool {
     let constraints = build_letter_constraints(clue);
     matches_positions(word, clue) && matches_counts(&letter_counts, &constraints)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clue_parse_valid() {
+        let clue = Clue::parse("crane", "G_Y__").unwrap();
+        assert_eq!(clue.word, ['c', 'r', 'a', 'n', 'e']);
+        assert_eq!(
+            clue.hints,
+            [Hint::Green, Hint::Gray, Hint::Yellow, Hint::Gray, Hint::Gray]
+        );
+    }
+
+    #[test]
+    fn test_clue_parse_invalid_length() {
+        assert!(Clue::parse("cran", "G___").is_err());
+        assert!(Clue::parse("crane", "G___").is_err());
+    }
+
+    #[test]
+    fn test_clue_parse_case_insensitive() {
+        let clue = Clue::parse("CRANE", "g_y__").unwrap();
+        assert_eq!(clue.word, ['c', 'r', 'a', 'n', 'e']);
+        assert_eq!(clue.hints[0], Hint::Green);
+        assert_eq!(clue.hints[2], Hint::Yellow);
+    }
+
+    #[test]
+    fn test_clue_parse_invalid_char_in_word() {
+        assert!(Clue::parse("cr4ne", "G____").is_err());
+        assert!(Clue::parse("cr ne", "G____").is_err());
+    }
+
+    #[test]
+    fn test_clue_parse_invalid_feedback_char() {
+        assert!(Clue::parse("crane", "G_X__").is_err());
+        assert!(Clue::parse("crane", "G_1__").is_err());
+    }
+}
