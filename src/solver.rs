@@ -1,6 +1,4 @@
-use std::collections::{HashMap, HashSet};
-
-use crate::clue::{matches_clue, Clue};
+use crate::clue::{build_letter_constraints, matches_clue, Clue};
 
 const WORDS: &str = include_str!("data/words.txt");
 
@@ -10,28 +8,36 @@ pub fn load_words() -> Vec<String> {
 
 /// Filter candidate words based on all accumulated clues.
 pub fn filter_candidates(candidates: &[String], clues: &[Clue]) -> Vec<String> {
+    let all_constraints: Vec<_> = clues.iter().map(build_letter_constraints).collect();
     candidates
         .iter()
-        .filter(|word| matches_all_clues(word, clues))
+        .filter(|word| matches_all_clues(word, clues, &all_constraints))
         .cloned()
         .collect()
 }
 
-fn matches_all_clues(word: &str, clues: &[Clue]) -> bool {
+fn matches_all_clues(word: &str, clues: &[Clue], all_constraints: &[crate::clue::LetterConstraints]) -> bool {
     let chars: Vec<char> = word.chars().collect();
-    for clue in clues {
-        if !matches_clue(&chars, clue) {
+    for (clue, constraints) in clues.iter().zip(all_constraints.iter()) {
+        if !matches_clue(&chars, clue, constraints) {
             return false;
         }
     }
     true
 }
 
-/// Score a word by summing per-position letter frequencies in the candidate pool.
-/// Higher score = covers more common letters = better at narrowing candidates.
-fn score_word(word: &str, freq: &HashMap<char, usize>) -> usize {
-    let unique: HashSet<char> = word.chars().collect();
-    unique.iter().map(|c| freq.get(c).copied().unwrap_or(0)).sum()
+fn score_word(word: &str, freq: &[usize; 26]) -> usize {
+    let mut seen = 0u32;
+    let mut score = 0;
+    for c in word.chars() {
+        let idx = (c as u8 - b'a') as usize;
+        let bit = 1 << idx;
+        if seen & bit == 0 {
+            seen |= bit;
+            score += freq[idx];
+        }
+    }
+    score
 }
 
 pub fn suggest_next(candidates: &[String], all_words: &[String]) -> Option<String> {
@@ -42,11 +48,16 @@ pub fn suggest_next(candidates: &[String], all_words: &[String]) -> Option<Strin
         return Some(candidates[0].clone());
     }
 
-    // Build letter frequency across remaining candidates
-    let mut freq: HashMap<char, usize> = HashMap::new();
+    let mut freq = [0usize; 26];
     for word in candidates {
+        let mut seen = 0u32;
         for c in word.chars() {
-            *freq.entry(c).or_insert(0) += 1;
+            let idx = (c as u8 - b'a') as usize;
+            let bit = 1 << idx;
+            if seen & bit == 0 {
+                seen |= bit;
+                freq[idx] += 1;
+            }
         }
     }
 

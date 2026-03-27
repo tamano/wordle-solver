@@ -22,13 +22,12 @@ impl Clue {
         if feedback.len() != 5 {
             return Err(format!("Feedback must be 5 chars (G/Y/_), got '{}'", feedback));
         }
-        let word_chars: Vec<char> = word.to_lowercase().chars().collect();
         let mut w = ['a'; 5];
-        for (i, c) in word_chars.iter().enumerate() {
+        for (i, c) in word.to_lowercase().chars().enumerate() {
             if !c.is_ascii_alphabetic() {
                 return Err(format!("Word contains non-alphabetic character '{}'", c));
             }
-            w[i] = *c;
+            w[i] = c;
         }
         let mut hints = [Hint::Gray; 5];
         for (i, c) in feedback.to_uppercase().chars().enumerate() {
@@ -105,14 +104,13 @@ pub fn matches_counts(letter_counts: &HashMap<char, usize>, constraints: &Letter
     true
 }
 
-pub fn matches_clue(word: &[char], clue: &Clue) -> bool {
+pub fn matches_clue(word: &[char], clue: &Clue, constraints: &LetterConstraints) -> bool {
     let mut letter_counts: HashMap<char, usize> = HashMap::new();
     for &c in word {
         *letter_counts.entry(c).or_insert(0) += 1;
     }
 
-    let constraints = build_letter_constraints(clue);
-    matches_positions(word, clue) && matches_counts(&letter_counts, &constraints)
+    matches_positions(word, clue) && matches_counts(&letter_counts, constraints)
 }
 
 #[cfg(test)]

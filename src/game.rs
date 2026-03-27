@@ -164,12 +164,11 @@ pub fn run_game(
 
         if round > 6 {
             writeln!(out, "Reached 6 guesses. Game over.").unwrap();
-            let remaining: Vec<String> = candidates.iter().take(5).cloned().collect();
-            if !remaining.is_empty() {
-                let words: Vec<String> = remaining.iter().map(|w| w.to_uppercase()).collect();
+            if !candidates.is_empty() {
+                let words: Vec<String> = candidates.iter().take(5).map(|w| w.to_uppercase()).collect();
                 writeln!(out, "Remaining candidates: {}", words.join(", ")).unwrap();
             }
-            return GameResult::GameOver { remaining };
+            return GameResult::GameOver { remaining: candidates };
         }
     }
 }
